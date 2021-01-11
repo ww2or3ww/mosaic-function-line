@@ -15,9 +15,14 @@ from boto3.dynamodb.conditions import Key
 AWS_S3_BUCKET_NAME          = os.environ['AWS_S3_BUCKET_NAME']
 AWS_S3_ADDRESS              = os.environ['AWS_S3_ADDRESS']
 AWS_DYNAMODB_NAME           = os.environ['AWS_DYNAMODB_NAME']
+GOOGLE_DRIVE_DIR            = os.environ['GOOGLE_DRIVE_DIR']
 S3 = boto3.client('s3')
 REKOGNITION = boto3.client('rekognition')
 DYNAMO_TABLE = boto3.resource('dynamodb').Table(AWS_DYNAMODB_NAME)
+
+from googleapiclient.discovery import build 
+from googleapiclient.http import MediaFileUpload 
+from oauth2client.service_account import ServiceAccountCredentials 
 
 IMG_SIZE_PREV_MAX = 256
 
@@ -55,7 +60,7 @@ def get_type_label(selected_type):
 def mosaic_to_image(image_buffer, upload_key_org, upload_key_work, upload_key_prev, selected_type):
     file_bytes = np.asarray(bytearray(image_buffer), dtype=np.uint8)
     image_org = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-    upload_image_to_s3(image_org, AWS_S3_BUCKET_NAME, upload_key_org)
+    upload_image_to_s3(image_org, AWS_S3_BUCKET_NAME, upload_key_org, True)
     
     image_work = mosaic_faces(selected_type, AWS_S3_BUCKET_NAME, upload_key_org, image_org)
     if image_work is None:
@@ -145,11 +150,15 @@ def resize_image(image_work, target_size):
     return cv2.resize(image_work , (int(width * mag), int(height * mag)))
 
 @retry(tries=3, delay=1)
-def upload_image_to_s3(image, bucket, s3Key):
-    localpath = os.path.join('/tmp/', os.path.basename(s3Key))
+def upload_image_to_s3(image, bucket, s3Key, isUploadGoogleDrive=False):
+    filename = os.path.basename(s3Key)
+    localpath = os.path.join('/tmp/', filename)
     try:
         cv2.imwrite(localpath, image)
         S3.upload_file(Filename=localpath, Bucket=bucket, Key=s3Key)
+        
+        if isUploadGoogleDrive:
+            upload_file_to_google_drive(filename, localpath)
         
     except Exception as e:
         logger.exception(e)
@@ -198,3 +207,29 @@ def update_user_selected_type(user_id, selected_type):
             ':selected_type': selected_type
         }
     )
+
+def upload_file_to_google_drive(fileName, local_file_path):
+    try:
+        ext = os.path.splitext(local_file_path.lower())[1][1:]
+        if ext == "jpg":
+            ext = "jpeg"
+        mimeType = "image/" + ext
+
+        keyFile = "service-account-key.json"
+        scope = ['https://www.googleapis.com/auth/drive.file'] 
+        api_name = "drive"
+        api_version = "v3"
+        service = getGoogleService(keyFile, scope, api_name, api_version)
+        file_metadata = {'name': fileName, 'mimeType': mimeType, 'parents': [GOOGLE_DRIVE_DIR] } 
+        media = MediaFileUpload(local_file_path, mimetype=mimeType, resumable=True) 
+        file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+
+        logger.info("uploaded : {0}".format(file))
+        return file["id"]
+
+    except Exception as e:
+        logger.exception(e)
+
+def getGoogleService(keyFile, scope, api_name, api_version):
+    credentials = ServiceAccountCredentials.from_json_keyfile_name(keyFile, scopes=scope)
+    return build(api_name, api_version, credentials=credentials, cache_discovery=False) 

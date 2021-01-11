@@ -14,3 +14,6 @@ $ cd source
 $ zip -r ../lambda-package.zip *
 $ aws lambda update-function-code --function-name mosaic-function-line --zip-file fileb://../lambda-package.zip
 ```
+
+## その他
+source内に`service-account-key.json`が必要。
