@@ -1,3 +1,5 @@
+# --- coding: utf-8 ---
+# mosaic-function-line > mosaic_function_line_proc
 import os
 from retry import retry
 import urllib.parse
@@ -16,6 +18,8 @@ AWS_DYNAMODB_NAME           = os.environ['AWS_DYNAMODB_NAME']
 S3 = boto3.client('s3')
 REKOGNITION = boto3.client('rekognition')
 DYNAMO_TABLE = boto3.resource('dynamodb').Table(AWS_DYNAMODB_NAME)
+
+IMG_SIZE_PREV_MAX = 256
 
 def get_actions():
     return [
@@ -48,7 +52,7 @@ def get_type_label(selected_type):
         return actions[0]['label']
     
 
-def mosaic_to_image(image_buffer, upload_key_org, upload_key_work, selected_type):
+def mosaic_to_image(image_buffer, upload_key_org, upload_key_work, upload_key_prev, selected_type):
     file_bytes = np.asarray(bytearray(image_buffer), dtype=np.uint8)
     image_org = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     upload_image_to_s3(image_org, AWS_S3_BUCKET_NAME, upload_key_org)
@@ -58,9 +62,15 @@ def mosaic_to_image(image_buffer, upload_key_org, upload_key_work, selected_type
         return False, None, None
 
     upload_image_to_s3(image_work, AWS_S3_BUCKET_NAME, upload_key_work)
-    
     address_work = urllib.parse.urljoin(AWS_S3_ADDRESS, upload_key_work)
     address_preview = address_work
+
+    height = image_work.shape[0]
+    width = image_work.shape[1]
+    if height > IMG_SIZE_PREV_MAX or width > IMG_SIZE_PREV_MAX:
+        image_preview = resize_image(image_work, IMG_SIZE_PREV_MAX)
+        upload_image_to_s3(image_preview, AWS_S3_BUCKET_NAME, upload_key_prev)
+        address_preview = urllib.parse.urljoin(AWS_S3_ADDRESS, upload_key_prev)
     
     return True, address_work, address_preview
 
@@ -126,7 +136,13 @@ def mosaic_image(image_org, selected_type):
         
     except Exception as e:
         logger.exception(e)
-
+        
+def resize_image(image_work, target_size):
+    height = image_work.shape[0]
+    width = image_work.shape[1]
+    size_max = max(height, width)
+    mag = float(target_size) / float(size_max)
+    return cv2.resize(image_work , (int(width * mag), int(height * mag)))
 
 @retry(tries=3, delay=1)
 def upload_image_to_s3(image, bucket, s3Key):

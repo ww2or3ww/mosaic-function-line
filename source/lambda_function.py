@@ -1,3 +1,5 @@
+# --- coding: utf-8 ---
+# mosaic-function-line > lambda_function
 import os
 import datetime
 from io import BytesIO
@@ -108,7 +110,9 @@ def process_mosaic_to_image(user, message_id):
     upload_key_org = 'line/{0}/{1}'.format(user['user_id'], filename_org)
     filename_work = '{0}_work_{1}.jpg'.format(now, message_id)
     upload_key_work = 'line/{0}/{1}'.format(user['user_id'], filename_work)
+    filename_prev = '{0}_prev_{1}.jpg'.format(now, message_id)
+    upload_key_prev = 'line/{0}/{1}'.format(user['user_id'], filename_prev)
     selected_type = user['selected_type']
     
-    return proc.mosaic_to_image(image_buffer, upload_key_org, upload_key_work, selected_type)
+    return proc.mosaic_to_image(image_buffer, upload_key_org, upload_key_work, upload_key_prev, selected_type)
 
