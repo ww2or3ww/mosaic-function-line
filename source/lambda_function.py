@@ -1,6 +1,7 @@
 # --- coding: utf-8 ---
 # mosaic-function-line > lambda_function
 import os
+import json
 import datetime
 from io import BytesIO
 
