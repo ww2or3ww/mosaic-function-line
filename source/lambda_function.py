@@ -29,7 +29,8 @@ import mosaic_function_line_proc as proc
 
 def lambda_handler(event, context):
     logger.info(event)
-    signature = event['headers']['X-Line-Signature']
+    logger.info(json.dumps(event, ensure_ascii=False, indent=2))
+    signature = event['headers']['x-line-signature']
     body = event['body']
     
     # テキストメッセージを受け取った時に呼ばれるイベント
